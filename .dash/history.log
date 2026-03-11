@@ -4,3 +4,4 @@ PL|26-03-11|7|make dash context assemble real context
 PL|26-03-11|8|add branch cleanup to dash done
 PL|26-03-11|10|improve refine task granularity constraints
 PL|26-03-11|15|Add /revise command to update specs mid-work
+PL|26-03-11|16|Add conditional Design section to /refine for UI issues

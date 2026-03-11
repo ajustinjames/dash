@@ -7,7 +7,7 @@ AI-first issue tracking for solo devs. Slash commands are the primary interface;
 | Command | What it does |
 |---|---|
 | `/issue "desc"` | Create GH issue + PL log entry |
-| `/refine {issue}` | Generate spec + tasks from GH issue |
+| `/refine {issue}` | Generate spec + design (if UI) + tasks from GH issue |
 | `/status` | Show active issues with progress |
 | `/review [issue]` | Check spec/task coverage against branch diff |
 | `/done [issue]` | Check for incomplete tasks, then close issue |
@@ -59,6 +59,9 @@ NT|YY-MM-DD|{issue}|{text}
 
 ## Spec
 - bullet points
+
+## Design (UI issues only)
+- component breakdown, states, responsive, interaction, a11y
 
 ## Tasks
 - [ ] task

@@ -51,7 +51,7 @@ For small fixes, skip `/refine`.
 | Command | Description |
 |---|---|
 | `/issue "description"` | Create GitHub issue and log PL entry |
-| `/refine {issue}` | Fetch GH issue, generate spec + tasks in `.dash/active/` |
+| `/refine {issue}` | Fetch GH issue, generate spec + design (if UI) + tasks in `.dash/active/` |
 | `/status` | Show active issues with task progress and staleness |
 | `/review [issue]` | Check spec/task coverage against branch diff |
 | `/done [issue]` | Check for incomplete tasks, then close GH issue and delete active file |
@@ -111,6 +111,11 @@ Each in-flight issue gets a markdown file tracking its spec, tasks, and log:
 - Token bucket algorithm for /api/v1/* endpoints
 - 100 requests/min per API key
 - Return 429 with retry-after header
+
+## Design
+- Components: RateLimitBanner > [UsageBar, ResetTimer]
+- States: normal, warning (>80%), throttled (429)
+- Responsive: banner collapses to icon on mobile
 
 ## Tasks
 - [x] Add middleware skeleton
