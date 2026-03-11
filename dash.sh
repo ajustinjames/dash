@@ -1,6 +1,7 @@
 #!/bin/sh
 # Dash — lightweight issue tracking for solo devs
-# Run from repo root: ./dash.sh <command>
+# AI-first: slash commands are the primary interface, this script provides utilities.
+# Only `init` is user-facing. Other commands are called by AI slash commands.
 
 _dash_issue_from_branch() {
   git branch --show-current 2>/dev/null | sed -n 's|.*/||;s/^\([0-9]*\).*/\1/p'
@@ -10,13 +11,9 @@ _dash_date() {
   date +%y-%m-%d
 }
 
-_dash_slug() {
-  echo "$1" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g' | cut -c1-30
-}
-
 _dash_check_init() {
   if [ ! -d ".dash" ]; then
-    echo "Error: .dash/ not found. Run 'dash init' first." >&2
+    echo "Error: .dash/ not found. Run './dash.sh init' first." >&2
     return 1
   fi
 }
@@ -26,20 +23,6 @@ _dash_check_gh() {
     echo "Error: gh is not authenticated. Run 'gh auth login' first." >&2
     return 1
   fi
-}
-
-_dash_usage() {
-  cat <<'EOF'
-Usage: dash <command> [args]
-
-Commands:
-  init                Create .dash/ structure, install hooks, scaffold config
-  start "description" Create issue, active file, branch, and PL log entry
-  status              Show active issues with task progress
-  done [issue]        Close issue, archive active file (defaults to current branch)
-  note [issue] "text" Add a note to history log and active file
-  context cmd [args]  Print assembled slash command context to stdout
-EOF
 }
 
 _dash_init() {
@@ -72,44 +55,6 @@ EOF
   fi
 
   # Install git hooks
-  cat > .git/hooks/post-commit <<'HOOK'
-#!/bin/sh
-[ -f .dash/history.log ] || exit 0
-# Guard against infinite loop from --amend below
-[ -f .dash/.amending ] && exit 0
-ISSUE=$(git branch --show-current | sed -n 's|.*/||;s/^\([0-9]*\).*/\1/p')
-if [ -n "$ISSUE" ]; then
-  echo "CM|$(date +%y-%m-%d)|$ISSUE|$(git log -1 --oneline | cut -c9-)" >> .dash/history.log
-  touch .dash/.amending
-  git add .dash/history.log
-  git commit --amend --no-edit
-  rm -f .dash/.amending
-fi
-HOOK
-  chmod +x .git/hooks/post-commit
-
-  cat > .git/hooks/post-checkout <<'HOOK'
-#!/bin/sh
-[ -f .dash/history.log ] || exit 0
-# $3 is 1 for branch checkout, 0 for file checkout
-[ "$3" = "1" ] || exit 0
-ISSUE=$(git branch --show-current | sed -n 's|.*/||;s/^\([0-9]*\).*/\1/p')
-[ -n "$ISSUE" ] && echo "SW|$(date +%y-%m-%d)|$ISSUE" >> .dash/history.log
-exit 0
-HOOK
-  chmod +x .git/hooks/post-checkout
-
-  cat > .git/hooks/post-merge <<'HOOK'
-#!/bin/sh
-[ -f .dash/history.log ] || exit 0
-ISSUE=$(git branch --show-current | sed -n 's|.*/||;s/^\([0-9]*\).*/\1/p')
-if [ -n "$ISSUE" ] && [ -f ".dash/active/$ISSUE.md" ]; then
-  sed -i '' 's/\[ \]/[x]/g' ".dash/active/$ISSUE.md"
-  echo "MG|$(date +%y-%m-%d)|$ISSUE" >> .dash/history.log
-fi
-HOOK
-  chmod +x .git/hooks/post-merge
-
   cat > .git/hooks/prepare-commit-msg <<'HOOK'
 #!/bin/sh
 [ -f .dash/history.log ] || exit 0
@@ -126,10 +71,25 @@ HOOK
   mkdir -p .claude/commands
   _dash_install_commands
 
-  echo "Dash initialized. Hooks installed. Run 'dash start \"description\"' to begin."
+  echo "Dash initialized. Hooks installed. Use /issue to create your first issue."
 }
 
 _dash_install_commands() {
+  cat > .claude/commands/issue.md <<'CMD'
+Read the project config from .dash/config.yaml. Adopt the role described in `ai_role` from the config.
+
+$ARGUMENTS is a short description of the issue to create.
+
+Create a GitHub issue using:
+gh issue create --title "$ARGUMENTS" --body ""
+
+Extract the issue number from the URL returned.
+
+Run: ./dash.sh log-pl {issue number} "{description}"
+
+Print the issue number and URL.
+CMD
+
   cat > .claude/commands/refine.md <<'CMD'
 Read the project config from .dash/config.yaml. Adopt the role described in `ai_role` from the config.
 
@@ -163,7 +123,7 @@ CMD
   cat > .claude/commands/ask.md <<'CMD'
 Read the project config from .dash/config.yaml. Adopt the role described in `ai_role` from the config.
 
-Read .dash/history.log for project activity. If history.log exceeds 50 lines, read only lines since the last RL entry.
+Read .dash/history.log for project activity. If history.log exceeds 50 lines, read only the last 50 lines.
 
 Determine the current branch's issue number. Read that issue's active file in full from .dash/active/.
 For other active files, read only the `# GH-{n}: {title}` line. If keywords from the question match
@@ -178,70 +138,33 @@ Answer this question concisely: $ARGUMENTS
 Answer in 1-5 sentences unless the question requires a longer explanation.
 CMD
 
-  cat > .claude/commands/release.md <<'CMD'
+  cat > .claude/commands/status.md <<'CMD'
 Read the project config from .dash/config.yaml. Adopt the role described in `ai_role` from the config.
 
-Read .dash/history.log. If history.log exceeds 50 lines, read only lines since the last RL entry.
-Find all IC (issue closed) lines since the last RL (release) line.
-Use CM lines from history.log to understand what was committed per issue. Do not run `git log`.
+Run: ./dash.sh status
 
-Write release notes summarizing what shipped. Group into Features, Fixes, and Other
-sections as applicable. Keep release notes under 30 lines.
-
-Then run these commands:
-1. git tag $ARGUMENTS
-2. gh release create $ARGUMENTS --title "$ARGUMENTS" --notes "{release notes}"
-3. Append to .dash/history.log: RL|{YY-MM-DD}|$ARGUMENTS|{comma-separated issue numbers}
+Present the output to the user.
 CMD
-}
 
-_dash_start() {
-  if [ -z "$1" ]; then
-    echo "Usage: dash start \"description\"" >&2
-    return 1
-  fi
+  cat > .claude/commands/done.md <<'CMD'
+Read the project config from .dash/config.yaml. Adopt the role described in `ai_role` from the config.
 
-  _dash_check_init || return 1
-  _dash_check_gh || return 1
+$ARGUMENTS is an optional issue number. If omitted, detect from current branch.
 
-  description="$1"
-  slug=$(_dash_slug "$description")
+Run: ./dash.sh done $ARGUMENTS
 
-  # Create GitHub issue
-  output=$(gh issue create --title "$description" --body "" 2>&1)
-  if [ $? -ne 0 ]; then
-    echo "Error creating issue: $output" >&2
-    return 1
-  fi
+Report what was closed.
+CMD
 
-  # Extract issue number from URL (last path segment)
-  issue=$(echo "$output" | grep -o '[0-9]*$')
-  if [ -z "$issue" ]; then
-    echo "Error: could not extract issue number from: $output" >&2
-    return 1
-  fi
+  cat > .claude/commands/note.md <<'CMD'
+Read the project config from .dash/config.yaml. Adopt the role described in `ai_role` from the config.
 
-  # Create active file
-  cat > ".dash/active/${issue}.md" <<EOF
-# GH-${issue}: ${description}
+$ARGUMENTS is [optional issue number] followed by the note text.
 
-## Spec
+Run: ./dash.sh note $ARGUMENTS
 
-## Tasks
-
-## Log
-- $(_dash_date): Created from issue
-EOF
-
-  # Append PL to history.log
-  echo "PL|$(_dash_date)|${issue}|${description}" >> .dash/history.log
-
-  # Create and checkout branch
-  git checkout -b "${issue}-${slug}"
-
-  echo "Started GH-${issue}: ${description}"
-  echo "Branch: ${issue}-${slug}"
-  echo "Active file: .dash/active/${issue}.md"
+Confirm the note was added.
+CMD
 }
 
 _dash_status() {
@@ -361,36 +284,25 @@ _dash_note() {
   echo "Note added to GH-${issue}"
 }
 
-_dash_context() {
+_dash_log_pl() {
   _dash_check_init || return 1
 
-  command="$1"
-  shift
-  args="$*"
-
-  if [ -z "$command" ]; then
-    echo "Usage: dash context <command> [args]" >&2
+  if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "Usage: dash.sh log-pl <issue> \"description\"" >&2
     return 1
   fi
 
-  cmd_file=".claude/commands/${command}.md"
-  if [ ! -f "$cmd_file" ]; then
-    echo "Error: command file not found: $cmd_file" >&2
-    return 1
-  fi
-
-  # Read and substitute $ARGUMENTS
-  sed "s/\$ARGUMENTS/$args/g" "$cmd_file"
+  echo "PL|$(_dash_date)|$1|$2" >> .dash/history.log
+  echo "PL logged for GH-$1"
 }
 
 command="$1"
 shift 2>/dev/null
 case "$command" in
   init)    _dash_init ;;
-  start)   _dash_start "$1" ;;
   status)  _dash_status ;;
   done)    _dash_done "$1" ;;
   note)    _dash_note "$@" ;;
-  context) _dash_context "$@" ;;
-  *)       _dash_usage ;;
+  log-pl)  _dash_log_pl "$1" "$2" ;;
+  *)       echo "Usage: ./dash.sh <init|status|done|note|log-pl>" >&2 ;;
 esac

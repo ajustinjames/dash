@@ -1,6 +1,6 @@
 Read the project config from .dash/config.yaml. Adopt the role described in `ai_role` from the config.
 
-Read .dash/history.log for project activity. If history.log exceeds 50 lines, read only lines since the last RL entry.
+Read .dash/history.log for project activity. If history.log exceeds 50 lines, read only the last 50 lines.
 
 Determine the current branch's issue number. Read that issue's active file in full from .dash/active/.
 For other active files, read only the `# GH-{n}: {title}` line. If keywords from the question match
