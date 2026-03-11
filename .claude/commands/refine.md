@@ -26,7 +26,8 @@ Keep it to 3-6 bullets. Reference existing project design tokens or component li
 ## Tasks
 Generate 3-8 tasks. Each should be completable in under 2 hours.
 Checklist of concrete implementation steps. Each item should be a single action
-a developer can complete and check off.
+a developer can complete and check off. Each task should produce a verifiable outcome
+(a passing test, a working command, a visible change).
 If a Design section was generated, include at least one task for UI implementation.
 
 ## Log

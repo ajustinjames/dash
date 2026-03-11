@@ -37,7 +37,7 @@ _dash_init() {
   fi
 
   # Create directory structure
-  mkdir -p .dash/active .dash/decisions
+  mkdir -p .dash/active .dash/decisions .dash/archive
 
   # Create history.log if it doesn't exist
   [ -f .dash/history.log ] || touch .dash/history.log
@@ -50,6 +50,7 @@ _dash_init() {
 project: $_project
 repo: $_repo
 ai_role: terse solo-dev assistant. no fluff. short answers.
+# issue_template: optional — define custom sections for /issue body
 EOF
     echo "Created .dash/config.yaml"
   fi
@@ -78,10 +79,24 @@ _dash_install_commands() {
   cat > .claude/commands/issue.md <<'CMD'
 Read the project config from .dash/config.yaml. Adopt the role described in `ai_role` from the config.
 
-$ARGUMENTS is a short description of the issue to create.
+$ARGUMENTS is a description of the issue to create.
+
+Construct a structured issue body:
+- If $ARGUMENTS is a short one-liner (plain description, no structured content), place it in Background and leave Acceptance Criteria and Notes empty.
+- Otherwise, derive Background, Acceptance Criteria (bullet list), and Notes from $ARGUMENTS.
+
+Body template:
+## Background
+{description}
+
+## Acceptance Criteria
+{bullet list, or empty}
+
+## Notes
+{notes, or empty}
 
 Create a GitHub issue using:
-gh issue create --title "$ARGUMENTS" --body ""
+gh issue create --title "{title from $ARGUMENTS}" --body "{structured body}"
 
 Extract the issue number from the URL returned.
 
@@ -119,7 +134,8 @@ Keep it to 3-6 bullets. Reference existing project design tokens or component li
 ## Tasks
 Generate 3-8 tasks. Each should be completable in under 2 hours.
 Checklist of concrete implementation steps. Each item should be a single action
-a developer can complete and check off.
+a developer can complete and check off. Each task should produce a verifiable outcome
+(a passing test, a working command, a visible change).
 If a Design section was generated, include at least one task for UI implementation.
 
 ## Log
@@ -203,6 +219,28 @@ Run: ./dash.sh note $ARGUMENTS
 
 Confirm the note was added.
 CMD
+
+  cat > .claude/commands/revise.md <<'CMD'
+Read the project config from .dash/config.yaml. Adopt the role described in `ai_role` from the config.
+
+$ARGUMENTS is an optional issue number followed by a description of what changed. If no issue number is provided, detect from current branch.
+
+Read .dash/active/{issue}.md.
+
+Update the Spec and Tasks sections in place to reflect the changes described. Preserve the Log section intact.
+
+Append to the Log section:
+- {today's date as YY-MM-DD}: Revised: {brief description of what changed}
+
+Write the updated file back to .dash/active/{issue}.md.
+
+Run: ./dash.sh note {issue} "Revised: {brief description}"
+
+Post the updated Spec section as a comment on the GitHub issue:
+gh issue comment {issue} --body "{updated spec section}"
+
+Report what was changed.
+CMD
 }
 
 _dash_status() {
@@ -279,8 +317,11 @@ _dash_done() {
     echo "Warning: could not close GH-${issue} on GitHub" >&2
   fi
 
-  # Delete active file
-  rm -f ".dash/active/${issue}.md"
+  # Archive active file
+  mkdir -p .dash/archive
+  if [ -f ".dash/active/${issue}.md" ]; then
+    mv ".dash/active/${issue}.md" ".dash/archive/${issue}.md"
+  fi
 
   echo "Closed GH-${issue}"
 }
@@ -319,6 +360,123 @@ _dash_note() {
   echo "Note added to GH-${issue}"
 }
 
+_dash_log() {
+  _dash_check_init || return 1
+
+  if [ ! -f ".dash/history.log" ] || [ ! -s ".dash/history.log" ]; then
+    echo "No history."
+    return 0
+  fi
+
+  # Print in reverse chronological order
+  awk '{a[NR]=$0} END{for(i=NR;i>=1;i--) print a[i]}' .dash/history.log | \
+  while IFS='|' read -r type date issue rest; do
+    case "$type" in
+      RL) echo "=== ${rest} ===" ;;
+      IC)
+        title=""
+        for dir in .dash/archive .dash/active; do
+          [ -f "${dir}/${issue}.md" ] && title=$(head -1 "${dir}/${issue}.md" | sed 's/^# //') && break
+        done
+        [ -n "$title" ] && echo "${date}  CLOSED  ${title}" || echo "${date}  CLOSED  GH-${issue}"
+        ;;
+      PL) echo "${date}  PLAN    GH-${issue}: ${rest}" ;;
+      NT) echo "${date}  NOTE    GH-${issue}: ${rest}" ;;
+      CM) echo "${date}  COMMIT  GH-${issue}: ${rest}" ;;
+      *)  echo "${date}  ${type}  GH-${issue}${rest:+: }${rest}" ;;
+    esac
+  done
+}
+
+_dash_context_refine() {
+  issue="$1"
+  if [ -z "$issue" ]; then
+    echo "Error: issue number required for context refine" >&2
+    return 1
+  fi
+  echo "=== GitHub Issue ==="
+  gh issue view "$issue" --json title,body,comments 2>/dev/null || echo "(could not fetch GH-${issue})"
+  echo ""
+  echo "=== Active Issues ==="
+  for f in .dash/active/*.md; do
+    [ -f "$f" ] || continue
+    head -1 "$f"
+    grep '^\- ' "$f" | head -5
+    echo ""
+  done
+}
+
+_dash_context_ask() {
+  echo "=== History ==="
+  if [ -f ".dash/history.log" ]; then
+    lines=$(wc -l < .dash/history.log | tr -d ' ')
+    if [ "$lines" -gt 50 ]; then
+      tail -50 .dash/history.log
+    else
+      cat .dash/history.log
+    fi
+  fi
+  echo ""
+  echo "=== Current Issue ==="
+  issue=$(_dash_issue_from_branch)
+  if [ -n "$issue" ] && [ -f ".dash/active/${issue}.md" ]; then
+    cat ".dash/active/${issue}.md"
+  fi
+  echo ""
+  echo "=== Decisions ==="
+  question="$*"
+  for f in .dash/decisions/*.md; do
+    [ -f "$f" ] || continue
+    fname=$(basename "$f" .md)
+    for word in $question; do
+      if echo "$fname" | grep -qi "$word"; then
+        echo "--- $fname ---"
+        cat "$f"
+        echo ""
+        break
+      fi
+    done
+  done
+}
+
+_dash_context_release() {
+  echo "=== History since last release ==="
+  if [ -f ".dash/history.log" ]; then
+    if grep -q '^RL|' .dash/history.log; then
+      awk '/^RL\|/{found=1; next} found{print}' .dash/history.log
+    else
+      cat .dash/history.log
+    fi
+  fi
+  echo ""
+  echo "=== Closed Issues ==="
+  grep '^IC|' .dash/history.log 2>/dev/null | while IFS='|' read -r type date issue; do
+    title=""
+    for dir in .dash/archive .dash/active; do
+      [ -f "${dir}/${issue}.md" ] && title=$(head -1 "${dir}/${issue}.md" | sed 's/^# //') && break
+    done
+    echo "${date}: GH-${issue} ${title}"
+  done
+}
+
+_dash_context() {
+  cmd="$1"
+  shift
+  case "$cmd" in
+    refine)  _dash_context_refine "$@" ;;
+    ask)     _dash_context_ask "$@" ;;
+    release) _dash_context_release "$@" ;;
+    *)
+      if [ -f ".claude/commands/${cmd}.md" ]; then
+        cat ".claude/commands/${cmd}.md"
+      else
+        echo "Error: unknown context command: $cmd" >&2
+        return 1
+      fi
+      ;;
+  esac
+}
+
 _dash_log_pl() {
   _dash_check_init || return 1
 
@@ -338,6 +496,8 @@ case "$command" in
   status)  _dash_status ;;
   done)    _dash_done "$1" ;;
   note)    _dash_note "$@" ;;
+  log)     _dash_log ;;
   log-pl)  _dash_log_pl "$1" "$2" ;;
-  *)       echo "Usage: ./dash.sh <init|status|done|note|log-pl>" >&2 ;;
+  context) _dash_context "$@" ;;
+  *)       echo "Usage: ./dash.sh <init|status|done|note|log|log-pl|context>" >&2 ;;
 esac

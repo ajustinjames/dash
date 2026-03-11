@@ -24,11 +24,12 @@ This creates the `.dash/` directory structure, installs git hooks, scaffolds a c
 After `init`, everything happens through slash commands in your AI tool:
 
 ```
-/issue "add rate limiting"    → creates GH issue #42, logs PL entry
+/issue "add rate limiting"    → creates GH issue #42 with structured body, logs PL entry
 /refine 42                    → generates spec + tasks in .dash/active/42.md
 /status                       → shows active issues with progress
 /note "blocked on upstream"   → logs note to history + active file
 /review                       → checks spec coverage against branch diff
+/revise "switched to JWT"     → updates spec/tasks mid-work, posts comment to GH issue
 /done                         → checks tasks, then closes issue
 /ask "what's the auth strategy?" → answers from project context
 ```
@@ -36,12 +37,13 @@ After `init`, everything happens through slash commands in your AI tool:
 ### Quick workflow
 
 ```
-/issue "add rate limiting"    # creates GH-42
+/issue "add rate limiting"    # creates GH-42 with structured body
 /refine 42                    # generates spec with tasks
 ... write code, commit ...    # hooks auto-prepend GH-42 to commits
+/revise "scope reduced"       # update spec mid-work (optional)
 /status                       # GH-42: add rate limiting [2/4] (0d ago)
 /review                       # checks spec coverage, suggests next steps
-/done                         # checks tasks, closes GH-42, removes active file
+/done                         # checks tasks, closes GH-42, archives active file
 ```
 
 For small fixes, skip `/refine`.
@@ -50,11 +52,12 @@ For small fixes, skip `/refine`.
 
 | Command | Description |
 |---|---|
-| `/issue "description"` | Create GitHub issue and log PL entry |
+| `/issue "description"` | Create GitHub issue with structured body and log PL entry |
 | `/refine {issue}` | Fetch GH issue, generate spec + design (if UI) + tasks in `.dash/active/` |
 | `/status` | Show active issues with task progress and staleness |
 | `/review [issue]` | Check spec/task coverage against branch diff |
-| `/done [issue]` | Check for incomplete tasks, then close GH issue and delete active file |
+| `/revise [issue] "what changed"` | Update spec and tasks mid-work, post comment to GH issue |
+| `/done [issue]` | Check for incomplete tasks, then close GH issue and archive active file |
 | `/note [issue] "text"` | Log note to history and active file |
 | `/ask "question"` | Answer questions using project history, active files, decisions |
 
@@ -70,11 +73,11 @@ Hooks extract the issue number from the branch name. Supported formats: `42-slug
 
 ### AI slash commands
 
-Seven commands installed to `.claude/commands/`: `issue`, `refine`, `ask`, `status`, `review`, `done`, `note`.
+Eight commands installed to `.claude/commands/`: `issue`, `refine`, `ask`, `status`, `review`, `revise`, `done`, `note`.
 
 ### Utility script
 
-`dash.sh` provides utility functions that slash commands call: `status`, `done`, `note`, `log-pl`. These are not intended to be called directly by users.
+`dash.sh` provides utility functions that slash commands call: `status`, `done`, `note`, `log`, `log-pl`, `context`. These are not intended to be called directly by users.
 
 ## Project structure
 
@@ -84,6 +87,8 @@ Seven commands installed to `.claude/commands/`: `issue`, `refine`, `ask`, `stat
   history.log          # append-only event log
   active/              # one markdown file per in-flight issue
     42.md
+  archive/             # completed issue files (moved here on /done)
+    41.md
   decisions/           # human-authored decision records (optional)
     001-auth-strategy.md
 ```
@@ -137,7 +142,7 @@ Drop markdown files in `.dash/decisions/` to capture architectural decisions. Th
 - **AI slash commands are the interface.** `dash.sh` is just the utility layer.
 - **Git hooks do the bookkeeping.** Tracking is automatic.
 - **Single shell script, no dependencies beyond `gh`.** No build step, no runtime.
-- **Active files are temporary.** Deleted on `/done`.
+- **Active files are archived, not deleted.** Moved to `.dash/archive/` on `/done` for retrospectives.
 - **History log is permanent.** Compact format for humans and AI.
 
 ## License
