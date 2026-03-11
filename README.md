@@ -25,7 +25,7 @@ This creates the `.dash/` directory structure, installs git hooks into `.git/hoo
 ./dash.sh status                       # show in-flight issues with progress
 ./dash.sh note "blocked on upstream"   # log a note (defaults to current branch's issue)
 ./dash.sh done                         # close issue, clean up (defaults to current branch)
-./dash.sh context plan 42              # print slash command context to stdout
+./dash.sh context refine 42            # print slash command context to stdout
 ```
 
 ### Quick workflow
@@ -37,7 +37,7 @@ This creates the `.dash/` directory structure, installs git hooks into `.git/hoo
 ./dash.sh done                        # closes GH-42, archives active file
 ```
 
-For larger work, use `/plan 42` after `dash start` to have your AI tool generate a spec with tasks.
+For larger work, use `/refine 42` after `dash start` to have your AI tool generate a spec with tasks.
 
 ## Commands
 
@@ -69,7 +69,7 @@ Hooks extract the issue number from the branch name. Supported formats: `42-slug
 
 Installed to `.claude/commands/` for use in Claude Code (or print via `./dash.sh context` for any AI tool):
 
-- `/plan {issue}` — reads the GitHub issue, generates a spec file with tasks in `.dash/active/`
+- `/refine {issue}` — reads the GitHub issue, generates a spec file with tasks in `.dash/active/`
 - `/ask "question"` — answers questions using project history, active files, and decision records
 - `/release {tag}` — summarizes closed issues into release notes, creates a GitHub release
 

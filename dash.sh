@@ -130,7 +130,7 @@ HOOK
 }
 
 _dash_install_commands() {
-  cat > .claude/commands/plan.md <<'CMD'
+  cat > .claude/commands/refine.md <<'CMD'
 Read the project config from .dash/config.yaml. Adopt the role described in `ai_role` from the config.
 
 Fetch GitHub issue $ARGUMENTS using: gh issue view $ARGUMENTS --json title,body,comments
