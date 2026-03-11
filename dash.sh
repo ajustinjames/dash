@@ -1,6 +1,6 @@
 #!/bin/sh
 # Dash — lightweight issue tracking for solo devs
-# Source this file in your .bashrc/.zshrc: source /path/to/dash.sh
+# Run from repo root: ./dash.sh <command>
 
 _dash_issue_from_branch() {
   git branch --show-current 2>/dev/null | sed -n 's|.*/||;s/^\([0-9]*\).*/\1/p'
@@ -12,6 +12,20 @@ _dash_date() {
 
 _dash_slug() {
   echo "$1" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g' | cut -c1-30
+}
+
+_dash_check_init() {
+  if [ ! -d ".dash" ]; then
+    echo "Error: .dash/ not found. Run 'dash init' first." >&2
+    return 1
+  fi
+}
+
+_dash_check_gh() {
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "Error: gh is not authenticated. Run 'gh auth login' first." >&2
+    return 1
+  fi
 }
 
 _dash_usage() {
@@ -32,6 +46,11 @@ _dash_init() {
   if [ ! -d ".git" ]; then
     echo "Error: not a git repository" >&2
     return 1
+  fi
+
+  # Warn if gh is not authenticated (non-blocking)
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "Warning: gh is not authenticated. Run 'gh auth login' for full functionality." >&2
   fi
 
   # Create directory structure
@@ -55,6 +74,7 @@ EOF
   # Install git hooks
   cat > .git/hooks/post-commit <<'HOOK'
 #!/bin/sh
+[ -f .dash/history.log ] || exit 0
 # Guard against infinite loop from --amend below
 [ -f .dash/.amending ] && exit 0
 ISSUE=$(git branch --show-current | sed -n 's|.*/||;s/^\([0-9]*\).*/\1/p')
@@ -70,6 +90,7 @@ HOOK
 
   cat > .git/hooks/post-checkout <<'HOOK'
 #!/bin/sh
+[ -f .dash/history.log ] || exit 0
 # $3 is 1 for branch checkout, 0 for file checkout
 [ "$3" = "1" ] || exit 0
 ISSUE=$(git branch --show-current | sed -n 's|.*/||;s/^\([0-9]*\).*/\1/p')
@@ -80,6 +101,7 @@ HOOK
 
   cat > .git/hooks/post-merge <<'HOOK'
 #!/bin/sh
+[ -f .dash/history.log ] || exit 0
 ISSUE=$(git branch --show-current | sed -n 's|.*/||;s/^\([0-9]*\).*/\1/p')
 if [ -n "$ISSUE" ] && [ -f ".dash/active/$ISSUE.md" ]; then
   sed -i '' 's/\[ \]/[x]/g' ".dash/active/$ISSUE.md"
@@ -90,6 +112,7 @@ HOOK
 
   cat > .git/hooks/prepare-commit-msg <<'HOOK'
 #!/bin/sh
+[ -f .dash/history.log ] || exit 0
 # $2 is "merge" for merge commits, "commit" for amend
 [ "$2" = "merge" ] && exit 0
 [ "$2" = "commit" ] && exit 0
@@ -178,10 +201,8 @@ _dash_start() {
     return 1
   fi
 
-  if [ ! -d ".dash" ]; then
-    echo "Error: .dash/ not found. Run 'dash init' first." >&2
-    return 1
-  fi
+  _dash_check_init || return 1
+  _dash_check_gh || return 1
 
   description="$1"
   slug=$(_dash_slug "$description")
@@ -282,21 +303,23 @@ _dash_done() {
     return 1
   fi
 
-  if [ ! -d ".dash" ]; then
-    echo "Error: .dash/ not found. Run 'dash init' first." >&2
-    return 1
-  fi
+  _dash_check_init || return 1
+  _dash_check_gh || return 1
 
   # Tick all todos in active file
   if [ -f ".dash/active/${issue}.md" ]; then
     sed -i '' 's/\[ \]/[x]/g' ".dash/active/${issue}.md"
+  else
+    echo "Warning: no active file for GH-${issue}" >&2
   fi
 
   # Append IC to history.log
   echo "IC|$(_dash_date)|${issue}" >> .dash/history.log
 
-  # Close GitHub issue
-  gh issue close "$issue" 2>/dev/null
+  # Close GitHub issue (warn but don't fail)
+  if ! gh issue close "$issue" 2>/dev/null; then
+    echo "Warning: could not close GH-${issue} on GitHub" >&2
+  fi
 
   # Delete active file
   rm -f ".dash/active/${issue}.md"
@@ -305,6 +328,8 @@ _dash_done() {
 }
 
 _dash_note() {
+  _dash_check_init || return 1
+
   # Parse args: if first arg is numeric, it's the issue number
   if echo "$1" | grep -qE '^[0-9]+$'; then
     issue="$1"
@@ -337,6 +362,8 @@ _dash_note() {
 }
 
 _dash_context() {
+  _dash_check_init || return 1
+
   command="$1"
   shift
   args="$*"
@@ -356,14 +383,14 @@ _dash_context() {
   sed "s/\$ARGUMENTS/$args/g" "$cmd_file"
 }
 
-dash() {
-  case "$1" in
-    init)    _dash_init ;;
-    start)   _dash_start "$2" ;;
-    status)  _dash_status ;;
-    done)    _dash_done "$2" ;;
-    note)    shift; _dash_note "$@" ;;
-    context) shift; _dash_context "$@" ;;
-    *)       _dash_usage ;;
-  esac
-}
+command="$1"
+shift 2>/dev/null
+case "$command" in
+  init)    _dash_init ;;
+  start)   _dash_start "$1" ;;
+  status)  _dash_status ;;
+  done)    _dash_done "$1" ;;
+  note)    _dash_note "$@" ;;
+  context) _dash_context "$@" ;;
+  *)       _dash_usage ;;
+esac
