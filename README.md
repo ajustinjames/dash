@@ -1,6 +1,6 @@
 # Dash
 
-AI-first issue tracking for solo devs. Lives inside your git repo as a `.dash/` directory, uses GitHub Issues as the source of truth, and keeps a local history log via git hooks. Everything is driven through AI slash commands — the only direct command is `./dash.sh init`.
+AI-first issue tracking for solo devs and small teams. Lives inside your git repo as a `.dash/` directory, uses GitHub Issues as the source of truth, and keeps a local history log via git hooks. Everything is driven through AI slash commands — the only direct command is `./dash.sh init`.
 
 ## Install
 
