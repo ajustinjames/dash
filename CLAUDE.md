@@ -9,7 +9,8 @@ AI-first issue tracking for solo devs. Slash commands are the primary interface;
 | `/issue "desc"` | Create GH issue + PL log entry |
 | `/refine {issue}` | Generate spec + tasks from GH issue |
 | `/status` | Show active issues with progress |
-| `/done [issue]` | Close issue, clean up active file |
+| `/review [issue]` | Check spec/task coverage against branch diff |
+| `/done [issue]` | Check for incomplete tasks, then close issue |
 | `/note [issue] "text"` | Add note to history + active file |
 | `/ask "question"` | Query project context |
 
@@ -19,7 +20,7 @@ AI-first issue tracking for solo devs. Slash commands are the primary interface;
 |---|---|
 | `init` | **User-facing.** Create `.dash/`, install hooks, scaffold config, install slash commands |
 | `status` | Show active issues with task progress, staleness, current branch `*` |
-| `done [issue]` | Tick todos, IC log, `gh issue close`, delete active file |
+| `done [issue]` | IC log, `gh issue close`, delete active file |
 | `note [issue] "text"` | NT log + append to active file's Log section |
 | `log-pl {issue} "desc"` | Append PL entry to history.log |
 
@@ -34,7 +35,7 @@ Issue defaults to current branch when omitted.
   active/{issue}.md    # per-issue spec/tasks/log (deleted on done)
   decisions/*.md       # human-authored decision records
 .claude/commands/
-  issue.md refine.md ask.md status.md done.md note.md
+  issue.md refine.md ask.md status.md review.md done.md note.md
 ```
 
 ## Git Hooks (installed by `init`)
@@ -69,7 +70,7 @@ NT|YY-MM-DD|{issue}|{text}
 ## Lifecycle
 
 ```
-/issue "desc" → /refine {issue} → git work (hooks auto-track) → /done
+/issue "desc" → /refine {issue} → git work (hooks auto-track) → /review → /done
 ```
 
 For small fixes, skip `/refine`. Use `/note` and `/ask` during implementation.

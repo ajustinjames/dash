@@ -151,9 +151,35 @@ Read the project config from .dash/config.yaml. Adopt the role described in `ai_
 
 $ARGUMENTS is an optional issue number. If omitted, detect from current branch.
 
-Run: ./dash.sh done $ARGUMENTS
+Read .dash/active/{issue}.md and check for unchecked tasks (lines matching `- [ ]`).
 
-Report what was closed.
+If unchecked tasks exist:
+- List them
+- Ask the user to confirm closing with incomplete tasks, or to keep working
+
+If all tasks are checked (or user confirms):
+- Run: ./dash.sh done $ARGUMENTS
+- Report what was closed.
+CMD
+
+  cat > .claude/commands/review.md <<'CMD'
+Read the project config from .dash/config.yaml. Adopt the role described in `ai_role` from the config.
+
+$ARGUMENTS is an optional issue number. If omitted, detect from current branch.
+
+Read .dash/active/{issue}.md for the spec and tasks.
+
+Run: git diff main...HEAD --stat
+Also read the full diff for changed files relevant to the spec.
+
+For each spec bullet, assess: covered, partially covered, or not started.
+For each task, assess whether the diff evidence supports marking it done.
+
+Present a summary:
+- Spec coverage (which bullets are addressed)
+- Task status (which could be checked off)
+- Gaps or concerns
+- Suggested next steps
 CMD
 
   cat > .claude/commands/note.md <<'CMD'
@@ -229,10 +255,7 @@ _dash_done() {
   _dash_check_init || return 1
   _dash_check_gh || return 1
 
-  # Tick all todos in active file
-  if [ -f ".dash/active/${issue}.md" ]; then
-    sed -i '' 's/\[ \]/[x]/g' ".dash/active/${issue}.md"
-  else
+  if [ ! -f ".dash/active/${issue}.md" ]; then
     echo "Warning: no active file for GH-${issue}" >&2
   fi
 

@@ -28,7 +28,8 @@ After `init`, everything happens through slash commands in your AI tool:
 /refine 42                    → generates spec + tasks in .dash/active/42.md
 /status                       → shows active issues with progress
 /note "blocked on upstream"   → logs note to history + active file
-/done                         → closes issue, cleans up
+/review                       → checks spec coverage against branch diff
+/done                         → checks tasks, then closes issue
 /ask "what's the auth strategy?" → answers from project context
 ```
 
@@ -39,7 +40,8 @@ After `init`, everything happens through slash commands in your AI tool:
 /refine 42                    # generates spec with tasks
 ... write code, commit ...    # hooks auto-prepend GH-42 to commits
 /status                       # GH-42: add rate limiting [2/4] (0d ago)
-/done                         # closes GH-42, removes active file
+/review                       # checks spec coverage, suggests next steps
+/done                         # checks tasks, closes GH-42, removes active file
 ```
 
 For small fixes, skip `/refine`.
@@ -51,7 +53,8 @@ For small fixes, skip `/refine`.
 | `/issue "description"` | Create GitHub issue and log PL entry |
 | `/refine {issue}` | Fetch GH issue, generate spec + tasks in `.dash/active/` |
 | `/status` | Show active issues with task progress and staleness |
-| `/done [issue]` | Tick todos, log IC, close GH issue, delete active file |
+| `/review [issue]` | Check spec/task coverage against branch diff |
+| `/done [issue]` | Check for incomplete tasks, then close GH issue and delete active file |
 | `/note [issue] "text"` | Log note to history and active file |
 | `/ask "question"` | Answer questions using project history, active files, decisions |
 
@@ -67,7 +70,7 @@ Hooks extract the issue number from the branch name. Supported formats: `42-slug
 
 ### AI slash commands
 
-Six commands installed to `.claude/commands/`: `issue`, `refine`, `ask`, `status`, `done`, `note`.
+Seven commands installed to `.claude/commands/`: `issue`, `refine`, `ask`, `status`, `review`, `done`, `note`.
 
 ### Utility script
 
