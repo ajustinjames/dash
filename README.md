@@ -7,7 +7,7 @@ Lightweight issue tracking for solo devs and small teams. Dash lives inside your
 Copy `dash.sh` into your repo and initialize:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ajames/dash/main/dash.sh -o dash.sh && chmod +x dash.sh && ./dash.sh init
+curl -fsSL https://raw.githubusercontent.com/ajustinjames/dash/main/dash.sh -o dash.sh && chmod +x dash.sh && ./dash.sh init
 ```
 
 This creates the `.dash/` directory structure, installs git hooks into `.git/hooks/`, scaffolds a config, and sets up AI slash commands.
